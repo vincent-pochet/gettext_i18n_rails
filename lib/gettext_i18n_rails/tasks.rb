@@ -1,3 +1,4 @@
+# encoding: utf-8
 namespace :gettext do
   def load_gettext
     require 'gettext'
@@ -8,6 +9,7 @@ namespace :gettext do
   task :pack => :environment do
     load_gettext
     GetText.create_mofiles(true, locale_path, locale_path)
+    make_json
   end
 
   desc "Update pot/po files."
@@ -15,7 +17,7 @@ namespace :gettext do
     load_gettext
     $LOAD_PATH << File.join(File.dirname(__FILE__),'..','..','lib')
     require 'gettext_i18n_rails/haml_parser'
-
+    require 'gettext_i18n_rails/js_parser'
 
     if GetText.respond_to? :update_pofiles_org
       GetText.update_pofiles_org(
@@ -66,7 +68,7 @@ namespace :gettext do
     require 'gettext_i18n_rails/model_attributes_finder'
     require 'gettext_i18n_rails/active_record'
 
-    storage_file = "#{locale_path}/model_attributes.rb"
+    storage_file = file.join(locale_path, "model_attributes.rb")
     puts "writing model translations to: #{storage_file}"
 
     ignore_tables = [/^sitemap_/, /_versions$/, 'schema_migrations', 'sessions', 'delayed_jobs']
@@ -74,6 +76,24 @@ namespace :gettext do
       :to => storage_file,
       :ignore_columns => [/_id$/, 'id', 'type', 'created_at', 'updated_at'],
       :ignore_tables => ignore_tables
+    )
+  end
+
+  desc "write model data to <locale_path>/model_data.rb"
+  task :store_model_data => :environment do
+    require 'gettext_i18n_rails/model_data_finder'
+    require 'gettext_i18n_rails/active_record'
+    require 'yaml'
+
+    storage_file = File.join(locale_path, "model_data.rb")
+    js_storage_file = File.join(locale_path, "model_data_js.rb")
+    tables_file = File.join("config", "translated_tables.yml")
+    puts "writing model data to: #{storage_file} and #{js_storage_file}"
+
+    GettextI18nRails.store_model_data(
+      :to => storage_file,
+      :to_js => js_storage_file,
+      :tables_file => tables_file
     )
   end
 
@@ -103,6 +123,28 @@ namespace :gettext do
     system "msginit --locale=#{language} --input=#{pot} --output=#{new_po}"
   end
 
+  desc "Build javascript json translation file"
+  task :make_json => :environment do
+    make_json
+  end
+
+  def make_json
+    require 'gettext_i18n_rails/javascript_finder'
+
+    storage_file = "public/javascripts/locale/gettext_json_translations.js"
+    extra_translations = File.join(locale_path, "extra_translations_js.rb")
+    model_data = File.join(locale_path, "model_data_js.rb")
+    
+    puts "writing translation for javascript file to: #{storage_file}"
+
+    GettextI18nRails.store_json_translations(
+      :to => storage_file,
+      :locale_path => locale_path,
+      :extra_translations => extra_translations,
+      :model_data => model_data
+    )
+  end
+
   def locale_path
     FastGettext.translation_repositories[text_domain].instance_variable_get(:@options)[:path]
   rescue
@@ -115,6 +157,6 @@ namespace :gettext do
   end
 
   def files_to_translate
-    Dir.glob("{app,lib,config,#{locale_path}}/**/*.{rb,erb,haml}")
+    Dir.glob("{app,lib,config,public/javascripts,#{locale_path}}/**/*.{rb,erb,haml,js}")
   end
 end
