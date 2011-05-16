@@ -16,22 +16,20 @@ module GettextI18nRails
       translations[lang] = {}
 
       Dir.glob(File.join(folder, '*.po')) do |file|
-        code = File.read(file)
+        po_data = File.read(file)
+        mo_file = FastGettext::GetText::MOFile.new
+        FastGettext::GetText::PoParser.new.parse(po_data, mo_file, true, true)
 
-        code.scan(/^(msgid ".*?"\n(?:(?:msgid_plural ".*?"\n)|(?:msgstr ".*?")))\n/m).each do |block|
-          if /^msgid_plural "(.*?)"$/m.match(block[0])
-            msg = /^msgid "(.*?)"\nmsgid_plural "(.*?)"\nmsgstr\[0\] "(.*?)"\nmsgstr\[1\] "(.*?)"$/m.match(block[0])
+        mo_file.each do |message|
+          next if message[1].empty?
 
-            unless msg[1].empty? or msg[2].empty?
-              message_to_add = "id:#{msg[1]}:plural:#{msg[2]}"
-              if js_messages.include?(message_to_add)
-                translations[lang][message_to_add] = [msg[3].gsub(/["\n]/, ''), msg[4].gsub(/["\n]/, '')]
-              end
-            end
-          else
-            msg = /^msgid "(.*?)"\nmsgstr "(.*?)"$/m.match(block[0])
-            unless msg[1].empty? or not js_messages.include?(msg[1])
-              translations[lang][msg[1]] = msg[2].gsub(/["\n]/, '') unless msg[2].empty?
+          if js_messages.include?(message[0])
+            translations[lang][message[0]] = message[1]
+          elsif message[0].include? "\u0000"
+            msgs = message[0].split("\u0000")
+            message_to_add = "id:#{msgs[0]}:plural:#{msgs[1]}"
+            if (js_messages.include? message_to_add)
+              translations[lang][message_to_add] = message[1].split("\u0000")
             end
           end
         end
