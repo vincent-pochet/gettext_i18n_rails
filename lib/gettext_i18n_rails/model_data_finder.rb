@@ -33,7 +33,11 @@ module GettextI18nRails
       connection = ActiveRecord::Base.connection
       connection.tables.each do |table_name|
         next unless translatable_table?(table_name, tables)
-        found.concat get_table_data(connection, table_name, tables[table_name]['columns'])
+        if tables[table_name]['combinations']
+          found.concat get_table_data(connection, table_name, tables[table_name]['columns'], tables[table_name]['combinations'])
+        else
+          found.concat get_table_data(connection, table_name, tables[table_name]['columns'])
+        end
       end
 
       found
@@ -51,7 +55,7 @@ module GettextI18nRails
       found
     end
 
-    def get_table_data(connection, table_name, columns)
+    def get_table_data(connection, table_name, columns, combinations = [])
       found = []
       model = table_name.singularize.camelcase.constantize
 
@@ -59,7 +63,11 @@ module GettextI18nRails
         next unless translatable_column?(column.name, columns)
 
         connection.select_values("SELECT #{column.name} FROM #{table_name}").each do |value|
-          found.push("#{model}|#{value.gsub(/"/, '\\"')}")
+          output = value.gsub(/"/, '\\"')
+          found.push("#{model}|#{output}")
+          combinations.each do |combination|
+            found.push(combination.gsub('%{x}', output))
+          end
         end
       end
 
